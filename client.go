@@ -15,8 +15,8 @@ import (
 
 const (
 	defaultHTTPTimeout     = 15 * time.Second
-	defaultRegisterPath    = "/devices"
-	defaultTransactionPath = "/transactions/batch"
+	defaultRegisterPath    = "/sdk/register-device"
+	defaultTransactionPath = "/sdk/upload"
 )
 
 // Config aggregates every setting required to talk to the ShareX Indexer, including
@@ -28,8 +28,8 @@ type Config struct {
 	Routes                 Routes
 }
 
-// Routes lets callers override the default `/devices` and `/transactions/batch`
-// paths for local or pre-production environments.
+// Routes lets callers override the default `/sdk/register-device` and
+// `/sdk/upload` paths for local or pre-production environments.
 type Routes struct {
 	RegisterDevice   string
 	TransactionBatch string
@@ -54,13 +54,17 @@ type RegisterDeviceRequest struct {
 	WalletAddr  string `json:"walletAddress"`
 }
 
-// RegisterDeviceResponse describes the device registration response, including
-// the transaction hash and optional server message.
+// RegisterDeviceResponse models the SDK registration response which now returns
+// multiple on-chain transaction hashes.
 type RegisterDeviceResponse struct {
-	Success         bool   `json:"success"`
-	TransactionHash string `json:"transactionHash"`
-	Message         string `json:"message"`
-	Error           string `json:"error,omitempty"`
+	Success                bool   `json:"success"`
+	TransactionHash        string `json:"transactionHash"`
+	RoleTransactionHash    string `json:"roleTransactionHash"`
+	FundingTransactionHash string `json:"fundingTransactionHash"`
+	DeviceID               string `json:"deviceId"`
+	WalletAddress          string `json:"walletAddress"`
+	Message                string `json:"message"`
+	Error                  string `json:"error,omitempty"`
 }
 
 // BatchRequest contains the plaintext data required to submit a batch of
@@ -74,28 +78,14 @@ type BatchRequest struct {
 	SignedTransactions []string `json:"signedTransactions"`
 }
 
-// BatchResponse represents the outcome of a batch submission and may include
-// optional compression metrics.
+// BatchResponse represents the outcome of a batch upload and exposes per-
+// transaction hashes plus broadcast counters.
 type BatchResponse struct {
-	Success         bool       `json:"success"`
-	TransactionHash string     `json:"transactionHash"`
-	Message         string     `json:"message"`
-	Error           string     `json:"error,omitempty"`
-	BatchInfo       *BatchInfo `json:"batchInfo,omitempty"`
-}
-
-// BatchInfo exposes compression ratios and sizing metrics to help troubleshoot
-// network and storage costs for batch uploads.
-type BatchInfo struct {
-	DeviceID         string  `json:"deviceId"`
-	WalletAddress    string  `json:"walletAddress"`
-	OrderCount       int     `json:"orderCount"`
-	TotalAmount      string  `json:"totalAmount"`
-	DateComparable   string  `json:"dateComparable"`
-	CompressionRatio float64 `json:"compressionRatio,omitempty"`
-	OriginalSize     int     `json:"originalSize"`
-	CompressedSize   int     `json:"compressedSize"`
-	SignedCount      int     `json:"signedCount,omitempty"`
+	Success           bool     `json:"success"`
+	TransactionHashes []string `json:"transactionHashes"`
+	BroadcastCount    int      `json:"broadcastCount"`
+	Message           string   `json:"message"`
+	Error             string   `json:"error,omitempty"`
 }
 
 // secureEnvelope is the canonical encrypted payload sent to the server.
@@ -151,8 +141,9 @@ func NewClient(cfg Config) (*Client, error) {
 	}, nil
 }
 
-// RegisterDevice validates the request, encrypts it, sends it to `/devices`, and
-// returns the resulting on-chain transaction hash on success.
+// RegisterDevice validates the request, encrypts it, sends it to
+// `/sdk/register-device`, and returns the on-chain transaction hashes on
+// success.
 func (c *Client) RegisterDevice(ctx context.Context, req RegisterDeviceRequest) (*RegisterDeviceResponse, error) {
 	if err := req.Validate(); err != nil {
 		return nil, err
@@ -164,8 +155,8 @@ func (c *Client) RegisterDevice(ctx context.Context, req RegisterDeviceRequest) 
 	return &result, nil
 }
 
-// SubmitTransactionBatch validates a batch request and posts it to
-// `/transactions/batch`, typically for periodic offline uploads.
+// SubmitTransactionBatch validates a batch request and posts it to `/sdk/upload`
+// for periodic offline uploads.
 func (c *Client) SubmitTransactionBatch(ctx context.Context, req BatchRequest) (*BatchResponse, error) {
 	if err := req.Validate(); err != nil {
 		return nil, err

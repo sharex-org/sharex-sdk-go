@@ -87,7 +87,7 @@ func main() {
 func startMockIndexer(priv *ecdsa.PrivateKey) *httptest.Server {
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("/devices", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/sdk/register-device", func(w http.ResponseWriter, r *http.Request) {
 		req, err := decryptDeviceRequest(r, priv)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
@@ -96,14 +96,19 @@ func startMockIndexer(priv *ecdsa.PrivateKey) *httptest.Server {
 
 		fmt.Printf("[Indexer] Registered device %s wallet=%s\n", req.DeviceID, req.WalletAddr)
 
+		w.WriteHeader(http.StatusCreated)
 		json.NewEncoder(w).Encode(sharex.RegisterDeviceResponse{
-			Success:         true,
-			TransactionHash: "0xdevicehash",
-			Message:         "device registered",
+			Success:                true,
+			TransactionHash:        "0xdevicehash",
+			RoleTransactionHash:    "0xrolehash",
+			FundingTransactionHash: "0xfundhash",
+			DeviceID:               req.DeviceID,
+			WalletAddress:          req.WalletAddr,
+			Message:                "device registered",
 		})
 	})
 
-	mux.HandleFunc("/transactions/batch", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/sdk/upload", func(w http.ResponseWriter, r *http.Request) {
 		req, err := decryptBatchRequest(r, priv)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
@@ -111,25 +116,12 @@ func startMockIndexer(priv *ecdsa.PrivateKey) *httptest.Server {
 		}
 
 		fmt.Printf("[Indexer] Received %d signed tx(s) from %s\n", len(req.SignedTransactions), req.DeviceID)
-		totalPayload := 0
-		for _, tx := range req.SignedTransactions {
-			totalPayload += len(tx)
-		}
 
 		json.NewEncoder(w).Encode(sharex.BatchResponse{
-			Success:         true,
-			TransactionHash: "0xbatchhash",
-			Message:         "batch accepted",
-			BatchInfo: &sharex.BatchInfo{
-				DeviceID:       req.DeviceID,
-				WalletAddress:  req.DeviceID + "-wallet",
-				OrderCount:     req.OrderCount,
-				TotalAmount:    req.TotalAmount,
-				DateComparable: req.DateComparable,
-				SignedCount:    len(req.SignedTransactions),
-				OriginalSize:   totalPayload,
-				CompressedSize: totalPayload / 2,
-			},
+			Success:           true,
+			TransactionHashes: []string{"0xdeadbeef", "0xfee"},
+			BroadcastCount:    len(req.SignedTransactions),
+			Message:           "batch accepted",
 		})
 	})
 

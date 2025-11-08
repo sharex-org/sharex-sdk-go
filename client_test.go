@@ -39,7 +39,7 @@ func TestRegisterDeviceEncryption(t *testing.T) {
 	}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/devices", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/sdk/register-device", func(w http.ResponseWriter, r *http.Request) {
 		var env secureEnvelope
 		if err := json.NewDecoder(r.Body).Decode(&env); err != nil {
 			t.Fatalf("decode envelope: %v", err)
@@ -56,10 +56,15 @@ func TestRegisterDeviceEncryption(t *testing.T) {
 			t.Fatalf("unexpected payload: %+v", req)
 		}
 
+		w.WriteHeader(http.StatusCreated)
 		json.NewEncoder(w).Encode(RegisterDeviceResponse{
-			Success:         true,
-			TransactionHash: "0xabc",
-			Message:         "ok",
+			Success:                true,
+			TransactionHash:        "0xabc",
+			RoleTransactionHash:    "0xdef",
+			FundingTransactionHash: "0x123",
+			DeviceID:               req.DeviceID,
+			WalletAddress:          req.WalletAddr,
+			Message:                "ok",
 		})
 	})
 
@@ -89,7 +94,7 @@ func TestRegisterDeviceEncryption(t *testing.T) {
 	if err != nil {
 		t.Fatalf("register device: %v", err)
 	}
-	if !res.Success || res.TransactionHash != "0xabc" {
+	if !res.Success || res.TransactionHash != "0xabc" || res.RoleTransactionHash != "0xdef" {
 		t.Fatalf("unexpected response: %+v", res)
 	}
 }
@@ -105,7 +110,7 @@ func TestSubmitTransactionBatchEncryption(t *testing.T) {
 	}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/transactions/batch", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/sdk/upload", func(w http.ResponseWriter, r *http.Request) {
 		var env secureEnvelope
 		if err := json.NewDecoder(r.Body).Decode(&env); err != nil {
 			t.Fatalf("decode envelope: %v", err)
@@ -122,15 +127,10 @@ func TestSubmitTransactionBatchEncryption(t *testing.T) {
 			t.Fatalf("unexpected payload: %+v", req)
 		}
 		json.NewEncoder(w).Encode(BatchResponse{
-			Success:         true,
-			TransactionHash: "0xdef",
-			Message:         "submitted",
-			BatchInfo: &BatchInfo{
-				DeviceID:       req.DeviceID,
-				OrderCount:     req.OrderCount,
-				TotalAmount:    req.TotalAmount,
-				DateComparable: req.DateComparable,
-			},
+			Success:           true,
+			TransactionHashes: []string{"0x111", "0x222"},
+			BroadcastCount:    len(req.SignedTransactions),
+			Message:           "submitted",
 		})
 	})
 
@@ -160,7 +160,7 @@ func TestSubmitTransactionBatchEncryption(t *testing.T) {
 	if err != nil {
 		t.Fatalf("submit batch: %v", err)
 	}
-	if res.BatchInfo == nil || res.BatchInfo.DeviceID != "DEVICE1" {
+	if !res.Success || res.BroadcastCount != len(res.TransactionHashes) {
 		t.Fatalf("unexpected response: %+v", res)
 	}
 }

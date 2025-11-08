@@ -11,8 +11,8 @@ with its private key and forwards payloads to the Deshare contracts.
 - ECIES (secp256k1) public-key encryption so every request body becomes
   ciphertext via the Indexer key, keeping device identifiers and wallet
   addresses off the wire.
-- Indexer integrations: `/devices` (register device) and `/transactions/batch`
-  (batch submission) both run through the encrypted channel.
+- Indexer integrations: `/sdk/register-device` (register device) and
+  `/sdk/upload` (batch submission) both run through the encrypted channel.
 - Unified error wrapper `APIError` to quickly inspect HTTP status codes and
   response bodies.
 
@@ -107,7 +107,7 @@ sequenceDiagram
 
     Terminal->>SDK: Initialize client + generate wallet
     Terminal->>SDK: RegisterDeviceRequest
-    SDK->>Indexer: ECIES encrypted POST /devices
+    SDK->>Indexer: ECIES encrypted POST /sdk/register-device
     Indexer-->>Terminal: Registration result / tx hash
 
     Terminal->>SDK: Build outbound transactions
@@ -115,10 +115,10 @@ sequenceDiagram
     SDK-->>Terminal: Return 0x raw transactions
 
     Terminal->>SDK: BatchRequest (SignedTransactions)
-    SDK->>Indexer: ECIES encrypted POST /transactions/batch
+    SDK->>Indexer: ECIES encrypted POST /sdk/upload
     Indexer->>Chain: Relay signed transactions to opBNB RPC
     Chain-->>Indexer: Transaction hashes / status
-    Indexer-->>Terminal: BatchResponse (SignedCount, etc.)
+    Indexer-->>Terminal: BatchResponse (transactionHashes/broadcastCount)
 ```
 
 ## Encryption Pipeline
