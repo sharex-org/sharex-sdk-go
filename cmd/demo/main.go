@@ -10,6 +10,8 @@ import (
 	"math/big"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -49,6 +51,24 @@ func main() {
 	}
 
 	fmt.Printf("Device wallet address: %s\n", deviceWallet.Address)
+
+	keyPath, err := saveWalletKey(deviceWallet.PrivateKeyHex)
+	if err != nil {
+		log.Fatalf("save private key: %v", err)
+	}
+
+	fmt.Printf("Private key exported to %s (0600)\n", keyPath)
+
+	restoredWallet, err := loadWalletFromFile(keyPath)
+	if err != nil {
+		log.Fatalf("reload wallet: %v", err)
+	}
+
+	if restoredWallet.Address != deviceWallet.Address {
+		log.Fatalf("restored wallet mismatch: got %s want %s", restoredWallet.Address, deviceWallet.Address)
+	}
+
+	fmt.Println("Reloaded wallet from disk; public key:", restoredWallet.PublicKeyHex)
 
 	// Register the device
 	regResp, err := client.RegisterDevice(ctx, sharex.RegisterDeviceRequest{
@@ -199,4 +219,34 @@ func decrypt(payload string, priv *ecdsa.PrivateKey) ([]byte, error) {
 		return nil, fmt.Errorf("decrypt payload: %w", err)
 	}
 	return plain, nil
+}
+
+func saveWalletKey(privateKeyHex string) (string, error) {
+	file, err := os.CreateTemp("", "sharex-wallet-*.key")
+	if err != nil {
+		return "", fmt.Errorf("create wallet file: %w", err)
+	}
+	defer file.Close()
+	if err := file.Chmod(0o600); err != nil {
+		os.Remove(file.Name())
+		return "", fmt.Errorf("chmod wallet file: %w", err)
+	}
+	if _, err := fmt.Fprintln(file, privateKeyHex); err != nil {
+		os.Remove(file.Name())
+		return "", fmt.Errorf("write wallet file: %w", err)
+	}
+	return file.Name(), nil
+}
+
+func loadWalletFromFile(path string) (*sharex.Wallet, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read wallet file: %w", err)
+	}
+	key := strings.TrimSpace(string(data))
+	wallet, err := sharex.WalletFromPrivateKey(key)
+	if err != nil {
+		return nil, fmt.Errorf("wallet from private key: %w", err)
+	}
+	return wallet, nil
 }

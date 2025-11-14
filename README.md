@@ -181,7 +181,18 @@ Tests cover:
 Follow the repository guidelines in `AGENTS.md`: keep `gofmt`, ship tests with
 new capabilities, and extend `Routes` if you need multiple environments.
 
-## Demo: End-to-End Validation
+## Demo: Wallet Export + End-to-End Validation
+
+```bash
+go run ./cmd/demo
+```
+
+This single binary now demonstrates the full lifecycle:
+
+- Generates a wallet, saves the private key to a temp `sharex-wallet-*.key` file with `0600` permissions, and reloads it via `WalletFromPrivateKey` to prove deterministic recovery.
+- Spins up a mock Indexer, registers the device with ECIES-encrypted payloads, and submits a batch of signed Sepolia transactions through the encrypted channel.
+
+Use the printed wallet path if you want to inspect or back up the key; delete it once you're done.
 
 `cmd/demo` ships a minimal example that starts a mock Indexer locally:
 
