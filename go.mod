@@ -1,4 +1,4 @@
-module github.com/sharex/sharex-sdk-go
+module github.com/sharex-org/sharex-sdk-go
 
 go 1.23.4
 

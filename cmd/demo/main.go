@@ -19,7 +19,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/crypto/ecies"
-	sharex "github.com/sharex/sharex-sdk-go"
+	sharex "github.com/sharex-org/sharex-sdk-go"
 )
 
 func main() {

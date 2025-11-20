@@ -19,7 +19,7 @@ with its private key and forwards payloads to the Deshare contracts.
 ## Installation
 
 ```bash
-go get github.com/sharex/sharex-sdk-go
+go get github.com/sharex-org/sharex-sdk-go
 ```
 
 ## Quick Start
@@ -34,7 +34,7 @@ import (
 
     "github.com/ethereum/go-ethereum/common"
     "github.com/ethereum/go-ethereum/core/types"
-    "github.com/sharex/sharex-sdk-go"
+    "github.com/sharex-org/sharex-sdk-go"
 )
 
 func main() {
