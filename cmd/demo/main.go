@@ -185,7 +185,7 @@ func decryptBatchRequest(r *http.Request, priv *ecdsa.PrivateKey) (sharex.BatchR
 }
 
 func buildSignedDemoTransactions(privateKeyHex string) ([]string, error) {
-	chainID := big.NewInt(11155111) // Sepolia
+	chainID := big.NewInt(204) // opBNB Mainnet
 	to := common.HexToAddress("0x0000000000000000000000000000000000000000")
 	first := types.NewTx(&types.DynamicFeeTx{
 		ChainID:   chainID,

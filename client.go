@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	defaultHTTPTimeout     = 15 * time.Second
+	defaultHTTPTimeout     = 45 * time.Second
 	defaultRegisterPath    = "/sdk/register-device"
 	defaultTransactionPath = "/sdk/upload"
 )
