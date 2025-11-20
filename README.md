@@ -142,23 +142,23 @@ IDs, wallet addresses, or transaction details.
 
 ### Device Registration `RegisterDeviceRequest`
 
-| Field           | Description                                                   |
-| --------------- | ------------------------------------------------------------- |
-| `deviceId`      | Unique device identifier (hardware serial, secure element ID).|
-| `deviceType`    | Device class (Terminal/Mobile/...).                           |
-| `partnerCode`   | Partner identifier.                                           |
-| `merchantId`    | Merchant identifier.                                          |
-| `walletAddress` | Device wallet address (EVM).                                  |
+| Field           | Description                                                    |
+| --------------- | -------------------------------------------------------------- |
+| `deviceId`      | Unique device identifier (hardware serial, secure element ID). |
+| `deviceType`    | Device class (Terminal/Mobile/...).                            |
+| `partnerCode`   | Partner identifier.                                            |
+| `merchantId`    | Merchant identifier.                                           |
+| `walletAddress` | Device wallet address (EVM).                                   |
 
 ### Batch Upload `BatchRequest`
 
-| Field               | Description                                                                 |
-| ------------------- | --------------------------------------------------------------------------- |
-| `deviceId`          | Previously registered device ID.                                            |
-| `dateComparable`    | `YYYYMMDD` string used for server-side windowing.                           |
-| `orderCount`        | Number of records inside the batch (>0).                                    |
-| `totalAmount`       | Aggregate amount encoded as a string to avoid floating-point drift.         |
-| `signedTransactions`| Array of signed raw transactions (0x+hex) that the Indexer relays to RPC.   |
+| Field                | Description                                                               |
+| -------------------- | ------------------------------------------------------------------------- |
+| `deviceId`           | Previously registered device ID.                                          |
+| `dateComparable`     | `YYYYMMDD` string used for server-side windowing.                         |
+| `orderCount`         | Number of records inside the batch (>0).                                  |
+| `totalAmount`        | Aggregate amount encoded as a string to avoid floating-point drift.       |
+| `signedTransactions` | Array of signed raw transactions (0x+hex) that the Indexer relays to RPC. |
 
 ## Error Handling
 
