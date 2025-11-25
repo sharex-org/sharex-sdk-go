@@ -46,8 +46,6 @@ github.com/decred/dcrd/dcrec/secp256k1/v4 v4.4.0 h1:NMZiJj8QnKe1LgsbDayM4UoHwbvw
 github.com/decred/dcrd/dcrec/secp256k1/v4 v4.4.0/go.mod h1:ZXNYxsqcloTdSy/rNShjYzMhyjf0LaoftYK0p+A3h40=
 github.com/deepmap/oapi-codegen v1.6.0 h1:w/d1ntwh91XI0b/8ja7+u5SvA4IFfM0UNNLmiDR1gg0=
 github.com/deepmap/oapi-codegen v1.6.0/go.mod h1:ryDa9AgbELGeB+YEXE1dR53yAjHwFvE9iAUlWl9Al3M=
-github.com/digitalcrab/fastlz v0.0.0-20150210071913-e529802b40b3 h1:np6wRYHjJFjjFs3fgv3tFez7S/bo0fYDyv3jid1eG8c=
-github.com/digitalcrab/fastlz v0.0.0-20150210071913-e529802b40b3/go.mod h1:bYgIo88sDOGN5B6txI4HmPlySmVkp13xrgG9dcnNJ+g=
 github.com/ecies/go/v2 v2.0.11 h1:xYhtMdLiqNi02oLirFmLyNbVXw6250h3WM6zJryQdiM=
 github.com/ecies/go/v2 v2.0.11/go.mod h1:LPRzoefP0Tam+1uesQOq3Gtb6M2OwlFUnXBTtBAKfDQ=
 github.com/ethereum/c-kzg-4844 v1.0.0 h1:0X1LBXxaEtYD9xsyj9B9ctQEZIpnvVDeoBx8aHEwTNA=

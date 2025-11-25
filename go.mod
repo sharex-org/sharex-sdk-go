@@ -3,7 +3,6 @@ module github.com/sharex-org/sharex-sdk-go
 go 1.23.4
 
 require (
-	github.com/digitalcrab/fastlz v0.0.0-20150210071913-e529802b40b3
 	github.com/ecies/go/v2 v2.0.11
 	github.com/ethereum/go-ethereum v1.15.8
 )

@@ -8,7 +8,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/digitalcrab/fastlz"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 
@@ -65,10 +64,7 @@ func BuildSignedUploadBatchTx(p UploadBatchTxParams) (string, error) {
 	}
 
 	// FastLZ compress the JSON payload – must match on-chain LibZip.flzDecompress.
-	compressed, err := fastlz.Compress([]byte(p.TransactionDataJSON))
-	if err != nil {
-		return "", fmt.Errorf("compress transactionData: %w", err)
-	}
+	compressed := FlzCompress([]byte(p.TransactionDataJSON))
 
 	abiDef, err := deshare.DeshareMetaData.GetAbi()
 	if err != nil {

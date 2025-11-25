@@ -60,12 +60,12 @@ func main() {
         log.Fatal(err)
     }
 
-    // 3. 生成一笔调用真实 Deshare 合约 uploadTransactionBatch 的已签名交易
-    //    - 合约地址&链 ID 默认指向主网: 0x28e3889A3bc57D4421a5041E85Df8b516Ab683F8, chainId=204
-    //    - SDK 自动压缩 transactionData（FastLZ）并 ABI pack
+    // 3. Build a signed transaction that calls uploadTransactionBatch on the real Deshare contract
+    //    - Contract address & chain ID default to mainnet: 0x28e3889A3bc57D4421a5041E85Df8b516Ab683F8, chainId=204
+    //    - SDK automatically compresses transactionData (FastLZ) and performs ABI pack
     signedTx, err := sharex.BuildSignedUploadBatchTx(sharex.UploadBatchTxParams{
         PrivateKeyHex:       wallet.PrivateKeyHex,
-        Nonce:               0,                      // 从 RPC 查询 pending nonce
+        Nonce:               0,                      // Query pending nonce from RPC
         DateComparable:      "20250131",
         DeviceID:            "DEVICE001",
         TransactionDataJSON: `{"transactions":[{"id":1,"factOvertimeMoney":"99.99","deviceTerminal":"DEVICE001"}]}`,
@@ -78,7 +78,7 @@ func main() {
         DeviceID:           "DEVICE001",
         DateComparable:     "20241108",
         OrderCount:         1,
-        TotalAmount:        "99.99", // 与交易数据保持一致
+        TotalAmount:        "99.99", // Must match transaction data
         SignedTransactions: []string{signedTx},
     }
     if _, err := client.SubmitTransactionBatch(context.Background(), batch); err != nil {
@@ -91,10 +91,10 @@ Device requests rely solely on the ECIES public key for encryption and implicit
 auth, so no `x-api-key` header is required. Keep
 `EncryptionPublicKeyHex` in sync with the Indexer configuration.
 
-### 关于默认链和合约
+### Default Chain and Contract Configuration
 - `DefaultDeshareContractAddress = 0x28e3889A3bc57D4421a5041E85Df8b516Ab683F8`
 - `DefaultOpBNBChainID = 204`
-- 在 `BuildSignedUploadBatchTx` 中未填 `ContractAddress` 或 `ChainID` 时自动落到上述默认值；如需测试网请显式传入。
+- When `ContractAddress` or `ChainID` are not specified in `BuildSignedUploadBatchTx`, these defaults are used automatically. For testnet deployments, explicitly pass the desired values.
 
 ## Interaction Flow
 
@@ -191,7 +191,7 @@ go run ./cmd/demo
 This single binary now demonstrates the full lifecycle:
 
 - Generates a wallet, saves the private key to a temp `sharex-wallet-*.key` file with `0600` permissions, and reloads it via `WalletFromPrivateKey` to prove deterministic recovery.
-- Spins up a mock Indexer, registers the device with ECIES-encrypted payloads,并用 `BuildSignedUploadBatchTx` 生成一笔调用生产 Deshare 合约的已签名交易（默认 chainId=204，合约地址已内置），再通过 `/sdk/upload` 的加密通道提交。
+- Spins up a mock Indexer, registers the device with ECIES-encrypted payloads, uses `BuildSignedUploadBatchTx` to generate a signed transaction calling the production Deshare contract (default chainId=204, contract address built-in), and submits it through the encrypted `/sdk/upload` channel.
 
 Use the printed wallet path if you want to inspect or back up the key; delete it once you're done.
 
