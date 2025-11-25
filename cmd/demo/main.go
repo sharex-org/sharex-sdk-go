@@ -7,16 +7,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"math/big"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"strings"
 	"time"
 
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
-	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/crypto/ecies"
 	sharex "github.com/sharex-org/sharex-sdk-go"
@@ -84,17 +81,26 @@ func main() {
 
 	fmt.Printf("RegisterDevice response: %+v\n", regResp)
 
-	signedTxs, err := buildSignedDemoTransactions(deviceWallet.PrivateKeyHex)
+	// Build and sign a real uploadTransactionBatch call using the generated ABI binding.
+	signedTx, err := sharex.BuildSignedUploadBatchTx(sharex.UploadBatchTxParams{
+		PrivateKeyHex:       deviceWallet.PrivateKeyHex,
+		// ChainID & ContractAddress use SDK defaults (opBNB mainnet + production Deshare).
+		Nonce: 0, // Replace with pending nonce from your RPC when running against a live chain.
+		DeviceID:            "DEVICE-DEMO-001",
+		DateComparable:      time.Now().UTC().Format("20060102"),
+		TransactionDataJSON: `{"transactions":[{"id":1,"factOvertimeMoney":"99.99","cdb":"tawdajbntawdajbqtnwp6jhrt2zpekxq","deviceTerminal":"DEVICE-DEMO-001"}]}`,
+	})
 	if err != nil {
 		log.Fatalf("sign transactions: %v", err)
 	}
+	signedTxs := []string{signedTx}
 
 	// Upload a demo batch
 	batchResp, err := client.SubmitTransactionBatch(ctx, sharex.BatchRequest{
 		DeviceID:           "DEVICE-DEMO-001",
 		DateComparable:     time.Now().UTC().Format("20060102"),
 		OrderCount:         len(signedTxs),
-		TotalAmount:        "19999",
+		TotalAmount:        "99.99",
 		SignedTransactions: signedTxs,
 	})
 	if err != nil {
@@ -182,31 +188,6 @@ func decryptBatchRequest(r *http.Request, priv *ecdsa.PrivateKey) (sharex.BatchR
 		return sharex.BatchRequest{}, fmt.Errorf("decode payload: %w", err)
 	}
 	return req, nil
-}
-
-func buildSignedDemoTransactions(privateKeyHex string) ([]string, error) {
-	chainID := big.NewInt(204) // opBNB Mainnet
-	to := common.HexToAddress("0x0000000000000000000000000000000000000000")
-	first := types.NewTx(&types.DynamicFeeTx{
-		ChainID:   chainID,
-		Nonce:     0,
-		GasTipCap: big.NewInt(1_500_000_000),
-		GasFeeCap: big.NewInt(2_500_000_000),
-		Gas:       21_000,
-		To:        &to,
-		Value:     big.NewInt(0),
-	})
-	second := types.NewTx(&types.DynamicFeeTx{
-		ChainID:   chainID,
-		Nonce:     1,
-		GasTipCap: big.NewInt(1_500_000_000),
-		GasFeeCap: big.NewInt(2_500_000_000),
-		Gas:       21_000,
-		To:        &to,
-		Value:     big.NewInt(0),
-	})
-
-	return sharex.SignTransactions(privateKeyHex, []*types.Transaction{first, second})
 }
 
 func decrypt(payload string, priv *ecdsa.PrivateKey) ([]byte, error) {

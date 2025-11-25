@@ -30,10 +30,7 @@ package main
 import (
     "context"
     "log"
-    "math/big"
 
-    "github.com/ethereum/go-ethereum/common"
-    "github.com/ethereum/go-ethereum/core/types"
     "github.com/sharex-org/sharex-sdk-go"
 )
 
@@ -63,17 +60,16 @@ func main() {
         log.Fatal(err)
     }
 
-    // 3. Sign transactions and upload them as an encrypted batch
-    tx := types.NewTx(&types.DynamicFeeTx{
-        ChainID:   big.NewInt(11155111), // Sepolia testnet example
-        Nonce:     0,
-        GasTipCap: big.NewInt(1_500_000_000),
-        GasFeeCap: big.NewInt(2_000_000_000),
-        Gas:       21_000,
-        To:        common.HexToAddress("0x0000000000000000000000000000000000000000"),
-        Value:     big.NewInt(0),
+    // 3. 生成一笔调用真实 Deshare 合约 uploadTransactionBatch 的已签名交易
+    //    - 合约地址&链 ID 默认指向主网: 0x28e3889A3bc57D4421a5041E85Df8b516Ab683F8, chainId=204
+    //    - SDK 自动压缩 transactionData（FastLZ）并 ABI pack
+    signedTx, err := sharex.BuildSignedUploadBatchTx(sharex.UploadBatchTxParams{
+        PrivateKeyHex:       wallet.PrivateKeyHex,
+        Nonce:               0,                      // 从 RPC 查询 pending nonce
+        DateComparable:      "20250131",
+        DeviceID:            "DEVICE001",
+        TransactionDataJSON: `{"transactions":[{"id":1,"factOvertimeMoney":"99.99","deviceTerminal":"DEVICE001"}]}`,
     })
-    signedTx, err := sharex.SignTransaction(wallet.PrivateKeyHex, tx)
     if err != nil {
         log.Fatal(err)
     }
@@ -82,7 +78,7 @@ func main() {
         DeviceID:           "DEVICE001",
         DateComparable:     "20241108",
         OrderCount:         1,
-        TotalAmount:        "0",
+        TotalAmount:        "99.99", // 与交易数据保持一致
         SignedTransactions: []string{signedTx},
     }
     if _, err := client.SubmitTransactionBatch(context.Background(), batch); err != nil {
@@ -94,6 +90,11 @@ func main() {
 Device requests rely solely on the ECIES public key for encryption and implicit
 auth, so no `x-api-key` header is required. Keep
 `EncryptionPublicKeyHex` in sync with the Indexer configuration.
+
+### 关于默认链和合约
+- `DefaultDeshareContractAddress = 0x28e3889A3bc57D4421a5041E85Df8b516Ab683F8`
+- `DefaultOpBNBChainID = 204`
+- 在 `BuildSignedUploadBatchTx` 中未填 `ContractAddress` 或 `ChainID` 时自动落到上述默认值；如需测试网请显式传入。
 
 ## Interaction Flow
 
@@ -190,7 +191,7 @@ go run ./cmd/demo
 This single binary now demonstrates the full lifecycle:
 
 - Generates a wallet, saves the private key to a temp `sharex-wallet-*.key` file with `0600` permissions, and reloads it via `WalletFromPrivateKey` to prove deterministic recovery.
-- Spins up a mock Indexer, registers the device with ECIES-encrypted payloads, and submits a batch of signed Sepolia transactions through the encrypted channel.
+- Spins up a mock Indexer, registers the device with ECIES-encrypted payloads,并用 `BuildSignedUploadBatchTx` 生成一笔调用生产 Deshare 合约的已签名交易（默认 chainId=204，合约地址已内置），再通过 `/sdk/upload` 的加密通道提交。
 
 Use the printed wallet path if you want to inspect or back up the key; delete it once you're done.
 
