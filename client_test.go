@@ -3,6 +3,7 @@ package sharex
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"math/big"
 	"net/http"
 	"net/http/httptest"
@@ -96,6 +97,100 @@ func TestRegisterDeviceEncryption(t *testing.T) {
 	}
 	if !res.Success || res.TransactionHash != "0xabc" || res.RoleTransactionHash != "0xdef" {
 		t.Fatalf("unexpected response: %+v", res)
+	}
+}
+
+func TestUploadTransactionBatch(t *testing.T) {
+	serverWallet, err := GenerateWallet()
+	if err != nil {
+		t.Fatalf("generate server wallet: %v", err)
+	}
+
+	serverKey, err := crypto.HexToECDSA(strings.TrimPrefix(serverWallet.PrivateKeyHex, "0x"))
+	if err != nil {
+		t.Fatalf("parse server private key: %v", err)
+	}
+
+	deviceWallet, err := GenerateWallet()
+	if err != nil {
+		t.Fatalf("generate device wallet: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/sdk/upload", func(w http.ResponseWriter, r *http.Request) {
+		var env secureEnvelope
+		if err := json.NewDecoder(r.Body).Decode(&env); err != nil {
+			http.Error(w, "decode envelope", http.StatusBadRequest)
+			return
+		}
+
+		plaintext, err := decryptForTests(serverKey, env.Payload)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("decrypt: %v", err), http.StatusBadRequest)
+			return
+		}
+
+		var req BatchRequest
+		if err := json.Unmarshal(plaintext, &req); err != nil {
+			http.Error(w, "decode request", http.StatusBadRequest)
+			return
+		}
+
+		// Verify the batch request fields
+		if req.DeviceID != "TEST-DEVICE" {
+			http.Error(w, "wrong deviceId", http.StatusBadRequest)
+			return
+		}
+		if req.OrderCount != 1 {
+			http.Error(w, "wrong orderCount", http.StatusBadRequest)
+			return
+		}
+		if req.TotalAmount != "99.99" {
+			http.Error(w, "wrong totalAmount", http.StatusBadRequest)
+			return
+		}
+		if len(req.SignedTransactions) != 1 {
+			http.Error(w, "missing signedTransactions", http.StatusBadRequest)
+			return
+		}
+
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(BatchResponse{
+			Success:           true,
+			TransactionHashes: []string{"0xabc123"},
+			BroadcastCount:    1,
+			Message:           "batch uploaded",
+		})
+	})
+
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	client, err := NewClient(Config{
+		IndexerBaseURL:         srv.URL,
+		EncryptionPublicKeyHex: serverWallet.PublicKeyHex,
+	})
+	if err != nil {
+		t.Fatalf("new client: %v", err)
+	}
+
+	// Use the simplified high-level API
+	resp, err := client.UploadTransactionBatch(context.Background(), UploadTransactionBatchParams{
+		DeviceID:            "TEST-DEVICE",
+		DateComparable:      "20241128",
+		TransactionDataJSON: `{"transactions":[{"factOvertimeMoney":"99.99","order_no":"TEST001"}]}`,
+		PrivateKeyHex:       deviceWallet.PrivateKeyHex,
+		Nonce:               0,
+	})
+	if err != nil {
+		t.Fatalf("upload batch: %v", err)
+	}
+
+	if !resp.Success {
+		t.Errorf("expected success=true, got false")
+	}
+	if resp.BroadcastCount != 1 {
+		t.Errorf("expected broadcastCount=1, got %d", resp.BroadcastCount)
 	}
 }
 

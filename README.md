@@ -60,36 +60,110 @@ func main() {
         log.Fatal(err)
     }
 
-    // 3. Build a signed transaction that calls uploadTransactionBatch on the real Deshare contract
-    //    - Contract address & chain ID default to mainnet: 0x28e3889A3bc57D4421a5041E85Df8b516Ab683F8, chainId=204
-    //    - SDK automatically compresses transactionData (FastLZ) and performs ABI pack
-    signedTx, err := sharex.BuildSignedUploadBatchTx(sharex.UploadBatchTxParams{
-        PrivateKeyHex:       wallet.PrivateKeyHex,
-        Nonce:               0,                      // Query pending nonce from RPC
-        DateComparable:      "20250131",
+    // 3. Upload transaction batch (simplified API - RECOMMENDED)
+    //    SDK automatically handles:
+    //    ✅ Parsing transaction data to calculate orderCount and totalAmount
+    //    ✅ Building and signing the on-chain transaction
+    //    ✅ Submitting the batch to the indexer
+    //
+    //    ⚠️  IMPORTANT: Always use this high-level API to ensure orderCount
+    //       and totalAmount are calculated correctly from your transaction data!
+    resp, err := client.UploadTransactionBatch(context.Background(), sharex.UploadTransactionBatchParams{
         DeviceID:            "DEVICE001",
+        DateComparable:      "20250131",
         TransactionDataJSON: `{"transactions":[{"id":1,"factOvertimeMoney":"99.99","deviceTerminal":"DEVICE001"}]}`,
+        PrivateKeyHex:       wallet.PrivateKeyHex,
+        Nonce:               0, // Query pending nonce from RPC
+        // Optional: ChainID, ContractAddress, GasTipCap, GasFeeCap, GasLimit
+        // If not specified, SDK defaults to opBNB mainnet (chainId=204)
     })
     if err != nil {
         log.Fatal(err)
     }
 
-    batch := sharex.BatchRequest{
-        DeviceID:           "DEVICE001",
-        DateComparable:     "20241108",
-        OrderCount:         1,
-        TotalAmount:        "99.99", // Must match transaction data
-        SignedTransactions: []string{signedTx},
-    }
-    if _, err := client.SubmitTransactionBatch(context.Background(), batch); err != nil {
-        log.Fatal(err)
-    }
+    fmt.Printf("Batch uploaded successfully! Broadcast count: %d\n", resp.BroadcastCount)
 }
 ```
 
 Device requests rely solely on the ECIES public key for encryption and implicit
 auth, so no `x-api-key` header is required. Keep
 `EncryptionPublicKeyHex` in sync with the Indexer configuration.
+
+### ⚠️  OrderCount and TotalAmount Calculation
+
+**CRITICAL**: The SDK automatically calculates `orderCount` and `totalAmount` from your
+`transactionDataJSON` to ensure they match your actual transaction data.
+
+**Always use `UploadTransactionBatch`** (the high-level API) which handles this
+automatically. The low-level APIs are deprecated and should only be used for
+advanced scenarios.
+
+```go
+// ✅ CORRECT: Use high-level API (recommended)
+resp, err := client.UploadTransactionBatch(ctx, sharex.UploadTransactionBatchParams{
+    DeviceID:            "DEVICE001",
+    DateComparable:      "20250131",
+    TransactionDataJSON: `{"transactions":[...]}`,  // SDK auto-calculates from this
+    PrivateKeyHex:       wallet.PrivateKeyHex,
+    Nonce:               0,
+})
+
+// ❌ AVOID: Low-level API (deprecated, error-prone)
+// Manually calculating orderCount and totalAmount can lead to errors
+```
+
+The SDK calculates `orderCount` by counting transactions in the JSON array and
+`totalAmount` by summing amounts from these fields (in priority order):
+1. `factOvertimeMoney`
+2. `amount`
+3. `money`
+
+You can also validate your transaction data before uploading:
+
+```go
+orderCount, totalAmount, err := sharex.DeriveBatchTotals(transactionJSON)
+if err != nil {
+    log.Fatal("Invalid transaction data:", err)
+}
+fmt.Printf("Will upload %d transactions totaling %s\n", orderCount, totalAmount)
+```
+
+### Advanced Usage: Low-Level API (Deprecated)
+
+⚠️  **Not recommended for production use.** The low-level API requires manual
+calculation of `orderCount` and `totalAmount`, which is error-prone.
+
+<details>
+<summary>Click to see low-level API usage (advanced users only)</summary>
+
+```go
+// 1. Build and sign transaction manually
+signedTx, err := sharex.BuildSignedUploadBatchTx(sharex.UploadBatchTxParams{
+    PrivateKeyHex:       wallet.PrivateKeyHex,
+    Nonce:               0,
+    DateComparable:      "20250131",
+    DeviceID:            "DEVICE001",
+    TransactionDataJSON: `{"transactions":[{"factOvertimeMoney":"99.99"}]}`,
+})
+
+// 2. Manually calculate orderCount and totalAmount (error-prone!)
+orderCount, totalAmount, err := sharex.DeriveBatchTotals(transactionDataJSON)
+
+// 3. Submit batch with explicit parameters
+batch := sharex.BatchRequest{
+    DeviceID:           "DEVICE001",
+    DateComparable:     "20250131",
+    OrderCount:         orderCount,    // Must match transaction data!
+    TotalAmount:        totalAmount,   // Must match transaction data!
+    SignedTransactions: []string{signedTx},
+}
+resp, err := client.SubmitTransactionBatch(context.Background(), batch)
+```
+
+</details>
+
+The high-level `UploadTransactionBatch` is **strongly recommended** for all use cases
+as it eliminates human error in calculating batch parameters.
 
 ### Default Chain and Contract Configuration
 - `DefaultDeshareContractAddress = 0x28e3889A3bc57D4421a5041E85Df8b516Ab683F8`

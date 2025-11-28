@@ -13,19 +13,24 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/crypto/ecies"
 	sharex "github.com/sharex-org/sharex-sdk-go"
+
+	eciesgo "github.com/ecies/go/v2"
 )
 
 func main() {
 	ctx := context.Background()
 
 	// Simulate the Indexer's private key used to decrypt device uploads.
-	serverKey, err := crypto.GenerateKey()
+	serverWallet, err := sharex.GenerateWallet()
 	if err != nil {
-		log.Fatalf("generate indexer key: %v", err)
+		log.Fatalf("generate indexer wallet: %v", err)
+	}
+
+	serverKey, err := crypto.HexToECDSA(strings.TrimPrefix(serverWallet.PrivateKeyHex, "0x"))
+	if err != nil {
+		log.Fatalf("parse server private key: %v", err)
 	}
 
 	server := startMockIndexer(serverKey)
@@ -35,7 +40,7 @@ func main() {
 
 	client, err := sharex.NewClient(sharex.Config{
 		IndexerBaseURL:         server.URL,
-		EncryptionPublicKeyHex: hexutil.Encode(crypto.FromECDSAPub(&serverKey.PublicKey)),
+		EncryptionPublicKeyHex: serverWallet.PublicKeyHex,
 	})
 	if err != nil {
 		log.Fatalf("new client: %v", err)
@@ -81,33 +86,24 @@ func main() {
 
 	fmt.Printf("RegisterDevice response: %+v\n", regResp)
 
-	// Build and sign a real uploadTransactionBatch call using the generated ABI binding.
-	signedTx, err := sharex.BuildSignedUploadBatchTx(sharex.UploadBatchTxParams{
-		PrivateKeyHex:       deviceWallet.PrivateKeyHex,
-		// ChainID & ContractAddress use SDK defaults (opBNB mainnet + production Deshare).
-		Nonce: 0, // Replace with pending nonce from your RPC when running against a live chain.
+	// Upload a demo batch using the simplified high-level API
+	// The SDK automatically:
+	// 1. Parses transaction data to derive orderCount and totalAmount
+	// 2. Builds and signs the on-chain transaction
+	// 3. Submits the batch to the indexer
+	batchResp, err := client.UploadTransactionBatch(ctx, sharex.UploadTransactionBatchParams{
 		DeviceID:            "DEVICE-DEMO-001",
 		DateComparable:      time.Now().UTC().Format("20060102"),
 		TransactionDataJSON: `{"transactions":[{"id":1,"factOvertimeMoney":"99.99","cdb":"tawdajbntawdajbqtnwp6jhrt2zpekxq","deviceTerminal":"DEVICE-DEMO-001"}]}`,
+		PrivateKeyHex:       deviceWallet.PrivateKeyHex,
+		Nonce:               0, // Replace with pending nonce from your RPC when running against a live chain.
+		// ChainID & ContractAddress use SDK defaults (opBNB mainnet + production Deshare).
 	})
 	if err != nil {
-		log.Fatalf("sign transactions: %v", err)
-	}
-	signedTxs := []string{signedTx}
-
-	// Upload a demo batch
-	batchResp, err := client.SubmitTransactionBatch(ctx, sharex.BatchRequest{
-		DeviceID:           "DEVICE-DEMO-001",
-		DateComparable:     time.Now().UTC().Format("20060102"),
-		OrderCount:         len(signedTxs),
-		TotalAmount:        "99.99",
-		SignedTransactions: signedTxs,
-	})
-	if err != nil {
-		log.Fatalf("submit batch: %v", err)
+		log.Fatalf("upload batch: %v", err)
 	}
 
-	fmt.Printf("SubmitTransactionBatch response: %+v\n", batchResp)
+	fmt.Printf("UploadTransactionBatch response: %+v\n", batchResp)
 }
 
 func startMockIndexer(priv *ecdsa.PrivateKey) *httptest.Server {
@@ -195,7 +191,12 @@ func decrypt(payload string, priv *ecdsa.PrivateKey) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("decode base64: %w", err)
 	}
-	plain, err := ecies.ImportECDSA(priv).Decrypt(cipherBytes, nil, nil)
+
+	// Convert ECDSA private key to eciesgo private key
+	privKeyBytes := crypto.FromECDSA(priv)
+	eciesPrivKey := eciesgo.NewPrivateKeyFromBytes(privKeyBytes)
+
+	plain, err := eciesgo.Decrypt(eciesPrivKey, cipherBytes)
 	if err != nil {
 		return nil, fmt.Errorf("decrypt payload: %w", err)
 	}

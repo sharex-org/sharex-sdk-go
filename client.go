@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/big"
 	"net/http"
 	"net/url"
 	"strings"
@@ -155,8 +156,86 @@ func (c *Client) RegisterDevice(ctx context.Context, req RegisterDeviceRequest) 
 	return &result, nil
 }
 
+// UploadTransactionBatchParams contains only the business-level fields needed
+// to build, sign, and submit a transaction batch. The SDK handles all the
+// low-level details automatically.
+type UploadTransactionBatchParams struct {
+	DeviceID            string
+	DateComparable      string
+	TransactionDataJSON string
+	PrivateKeyHex       string
+	// Optional blockchain parameters (SDK defaults will be used if not provided)
+	ChainID         *big.Int
+	ContractAddress string
+	Nonce           uint64
+	GasTipCap       *big.Int
+	GasFeeCap       *big.Int
+	GasLimit        uint64
+}
+
+// UploadTransactionBatch is the high-level API for submitting transaction batches.
+// It automatically:
+//  1. Parses transactionDataJSON to derive orderCount and totalAmount
+//  2. Builds and signs the on-chain transaction
+//  3. Submits the batch to the indexer
+//
+// Callers only need to provide business-level fields; all cryptographic and
+// blockchain operations are handled internally.
+func (c *Client) UploadTransactionBatch(ctx context.Context, params UploadTransactionBatchParams) (*BatchResponse, error) {
+	if params.DeviceID == "" {
+		return nil, errors.New("deviceId is required")
+	}
+	if params.DateComparable == "" {
+		return nil, errors.New("dateComparable is required")
+	}
+	if params.TransactionDataJSON == "" {
+		return nil, errors.New("transactionDataJSON is required")
+	}
+	if params.PrivateKeyHex == "" {
+		return nil, errors.New("privateKeyHex is required")
+	}
+
+	// Build and sign the transaction
+	signedTx, err := BuildSignedUploadBatchTx(UploadBatchTxParams{
+		PrivateKeyHex:       params.PrivateKeyHex,
+		ContractAddress:     params.ContractAddress,
+		ChainID:             params.ChainID,
+		Nonce:               params.Nonce,
+		GasTipCap:           params.GasTipCap,
+		GasFeeCap:           params.GasFeeCap,
+		GasLimit:            params.GasLimit,
+		DeviceID:            params.DeviceID,
+		DateComparable:      params.DateComparable,
+		TransactionDataJSON: params.TransactionDataJSON,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("build signed transaction: %w", err)
+	}
+
+	// Derive orderCount and totalAmount from the JSON
+	orderCount, totalAmount, err := deriveBatchTotals(params.TransactionDataJSON)
+	if err != nil {
+		return nil, fmt.Errorf("parse transaction data: %w", err)
+	}
+
+	// Submit the batch
+	return c.SubmitTransactionBatch(ctx, BatchRequest{
+		DeviceID:           params.DeviceID,
+		DateComparable:     params.DateComparable,
+		OrderCount:         orderCount,
+		TotalAmount:        totalAmount,
+		SignedTransactions: []string{signedTx},
+	})
+}
+
 // SubmitTransactionBatch validates a batch request and posts it to `/sdk/upload`
 // for periodic offline uploads.
+//
+// ⚠️  DEPRECATED: This is a low-level API. Use UploadTransactionBatch instead,
+// which automatically calculates orderCount and totalAmount to prevent errors.
+//
+// Note: For most use cases, prefer UploadTransactionBatch which handles
+// transaction building, signing, and field calculation automatically.
 func (c *Client) SubmitTransactionBatch(ctx context.Context, req BatchRequest) (*BatchResponse, error) {
 	if err := req.Validate(); err != nil {
 		return nil, err

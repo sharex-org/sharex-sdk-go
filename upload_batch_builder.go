@@ -110,10 +110,30 @@ func BuildSignedUploadBatchTx(p UploadBatchTxParams) (string, error) {
 	return SignTransaction(p.PrivateKeyHex, tx)
 }
 
+// DeriveBatchTotals parses transactionDataJSON to compute orderCount and totalAmount.
+// This function is exported to allow external validation of batch parameters.
+//
+// It expects a top-level "transactions" array. Amount is read from
+// factOvertimeMoney, amount, or money fields, in that order.
+//
+// Example usage:
+//
+//	orderCount, totalAmount, err := sharex.DeriveBatchTotals(jsonData)
+//	if err != nil {
+//	    log.Fatal(err)
+//	}
+func DeriveBatchTotals(rawJSON string) (orderCount int, totalAmount string, err error) {
+	return deriveBatchTotals(rawJSON)
+}
+
 // deriveBatchTotals parses transactionDataJSON to compute orderCount and totalAmount.
 // It expects a top-level "transactions" array. Amount is read from
 // factOvertimeMoney, amount, or money fields, in that order.
 func deriveBatchTotals(rawJSON string) (int, string, error) {
+	if strings.TrimSpace(rawJSON) == "" {
+		return 0, "", errors.New("transactionDataJSON cannot be empty")
+	}
+
 	decoder := json.NewDecoder(strings.NewReader(rawJSON))
 	decoder.UseNumber()
 
@@ -138,7 +158,17 @@ func deriveBatchTotals(rawJSON string) (int, string, error) {
 
 	// Format with 2 decimal places for consistency with existing API.
 	totalAmount := formatRat(total, 2)
-	return len(payload.Transactions), totalAmount, nil
+	orderCount := len(payload.Transactions)
+
+	// Validate that we have reasonable values
+	if orderCount <= 0 {
+		return 0, "", errors.New("orderCount must be greater than zero")
+	}
+	if totalAmount == "0" || totalAmount == "0.00" {
+		return 0, "", errors.New("totalAmount must be greater than zero")
+	}
+
+	return orderCount, totalAmount, nil
 }
 
 func firstAmount(m map[string]interface{}, keys ...string) (*big.Rat, bool) {
