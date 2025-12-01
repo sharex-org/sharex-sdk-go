@@ -164,23 +164,39 @@ type UploadTransactionBatchParams struct {
 	DateComparable      string
 	TransactionDataJSON string
 	PrivateKeyHex       string
+
 	// Optional blockchain parameters (SDK defaults will be used if not provided)
 	ChainID         *big.Int
 	ContractAddress string
-	Nonce           uint64
 	GasTipCap       *big.Int
 	GasFeeCap       *big.Int
 	GasLimit        uint64
+
+	// Optional nonce and RPC configuration
+	// If Nonce is nil, SDK will automatically query it from the blockchain using RPCURL
+	Nonce  *uint64
+	RPCURL string // Optional, defaults to OpBNBMainnetRPC if not provided
 }
 
 // UploadTransactionBatch is the high-level API for submitting transaction batches.
 // It automatically:
-//  1. Parses transactionDataJSON to derive orderCount and totalAmount
-//  2. Builds and signs the on-chain transaction
-//  3. Submits the batch to the indexer
+//  1. Queries nonce from blockchain (if not provided)
+//  2. Parses transactionDataJSON to derive orderCount and totalAmount
+//  3. Builds and signs the on-chain transaction
+//  4. Submits the batch to the indexer
 //
 // Callers only need to provide business-level fields; all cryptographic and
 // blockchain operations are handled internally.
+//
+// Example (SDK auto-queries nonce):
+//
+//	resp, err := client.UploadTransactionBatch(ctx, sharex.UploadTransactionBatchParams{
+//	    DeviceID:            "DEVICE001",
+//	    DateComparable:      "20251201",
+//	    TransactionDataJSON: `{"transactions":[...]}`,
+//	    PrivateKeyHex:       wallet.PrivateKeyHex,
+//	    // Nonce will be queried automatically from blockchain
+//	})
 func (c *Client) UploadTransactionBatch(ctx context.Context, params UploadTransactionBatchParams) (*BatchResponse, error) {
 	if params.DeviceID == "" {
 		return nil, errors.New("deviceId is required")
@@ -195,15 +211,61 @@ func (c *Client) UploadTransactionBatch(ctx context.Context, params UploadTransa
 		return nil, errors.New("privateKeyHex is required")
 	}
 
+	// Get wallet address from private key
+	wallet, err := WalletFromPrivateKey(params.PrivateKeyHex)
+	if err != nil {
+		return nil, fmt.Errorf("derive wallet address: %w", err)
+	}
+
+	// Use provided RPC URL or default to opBNB mainnet
+	rpcURL := params.RPCURL
+	if rpcURL == "" {
+		rpcURL = OpBNBMainnetRPC
+	}
+
+	// Auto-query nonce if not provided
+	var nonce uint64
+	if params.Nonce == nil {
+		queriedNonce, err := GetNonce(wallet.Address, rpcURL)
+		if err != nil {
+			return nil, fmt.Errorf("query nonce from blockchain: %w", err)
+		}
+		nonce = queriedNonce
+	} else {
+		nonce = *params.Nonce
+	}
+
+	// Auto-estimate gas if not provided
+	gasTipCap := params.GasTipCap
+	gasFeeCap := params.GasFeeCap
+	gasLimit := params.GasLimit
+
+	if gasTipCap == nil || gasFeeCap == nil || gasLimit == 0 {
+		estimate, err := EstimateGas(rpcURL)
+		if err != nil {
+			return nil, fmt.Errorf("estimate gas from blockchain: %w", err)
+		}
+
+		if gasTipCap == nil {
+			gasTipCap = estimate.GasTipCap
+		}
+		if gasFeeCap == nil {
+			gasFeeCap = estimate.GasFeeCap
+		}
+		if gasLimit == 0 {
+			gasLimit = estimate.GasLimit
+		}
+	}
+
 	// Build and sign the transaction
 	signedTx, err := BuildSignedUploadBatchTx(UploadBatchTxParams{
 		PrivateKeyHex:       params.PrivateKeyHex,
 		ContractAddress:     params.ContractAddress,
 		ChainID:             params.ChainID,
-		Nonce:               params.Nonce,
-		GasTipCap:           params.GasTipCap,
-		GasFeeCap:           params.GasFeeCap,
-		GasLimit:            params.GasLimit,
+		Nonce:               nonce,
+		GasTipCap:           gasTipCap,
+		GasFeeCap:           gasFeeCap,
+		GasLimit:            gasLimit,
 		DeviceID:            params.DeviceID,
 		DateComparable:      params.DateComparable,
 		TransactionDataJSON: params.TransactionDataJSON,

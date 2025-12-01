@@ -88,16 +88,23 @@ func main() {
 
 	// Upload a demo batch using the simplified high-level API
 	// The SDK automatically:
-	// 1. Parses transaction data to derive orderCount and totalAmount
-	// 2. Builds and signs the on-chain transaction
-	// 3. Submits the batch to the indexer
+	// 1. Queries nonce from blockchain (no need to provide!)
+	// 2. Parses transaction data to derive orderCount and totalAmount
+	// 3. Builds and signs the on-chain transaction
+	// 4. Submits the batch to the indexer
+	//
+	// You only need to provide business-level fields!
+	nonce := uint64(0) // For demo/testing with mock indexer
 	batchResp, err := client.UploadTransactionBatch(ctx, sharex.UploadTransactionBatchParams{
 		DeviceID:            "DEVICE-DEMO-001",
 		DateComparable:      time.Now().UTC().Format("20060102"),
 		TransactionDataJSON: `{"transactions":[{"id":1,"factOvertimeMoney":"99.99","cdb":"tawdajbntawdajbqtnwp6jhrt2zpekxq","deviceTerminal":"DEVICE-DEMO-001"}]}`,
 		PrivateKeyHex:       deviceWallet.PrivateKeyHex,
-		Nonce:               0, // Replace with pending nonce from your RPC when running against a live chain.
+		Nonce:               &nonce, // Optional: provide nonce or let SDK auto-query
 		// ChainID & ContractAddress use SDK defaults (opBNB mainnet + production Deshare).
+		
+		// For production, simply omit Nonce and SDK will auto-query:
+		// Nonce: nil,  // SDK will automatically query from blockchain
 	})
 	if err != nil {
 		log.Fatalf("upload batch: %v", err)

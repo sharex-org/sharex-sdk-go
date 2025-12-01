@@ -174,13 +174,14 @@ func TestUploadTransactionBatch(t *testing.T) {
 		t.Fatalf("new client: %v", err)
 	}
 
-	// Use the simplified high-level API
+	// Use the simplified high-level API with explicit nonce
+	nonce := uint64(0)
 	resp, err := client.UploadTransactionBatch(context.Background(), UploadTransactionBatchParams{
 		DeviceID:            "TEST-DEVICE",
 		DateComparable:      "20241128",
 		TransactionDataJSON: `{"transactions":[{"factOvertimeMoney":"99.99","order_no":"TEST001"}]}`,
 		PrivateKeyHex:       deviceWallet.PrivateKeyHex,
-		Nonce:               0,
+		Nonce:               &nonce, // Use explicit nonce for testing
 	})
 	if err != nil {
 		t.Fatalf("upload batch: %v", err)
@@ -191,6 +192,85 @@ func TestUploadTransactionBatch(t *testing.T) {
 	}
 	if resp.BroadcastCount != 1 {
 		t.Errorf("expected broadcastCount=1, got %d", resp.BroadcastCount)
+	}
+}
+
+func TestUploadTransactionBatchAutoNonce(t *testing.T) {
+	serverWallet, err := GenerateWallet()
+	if err != nil {
+		t.Fatalf("generate server wallet: %v", err)
+	}
+
+	serverKey, err := crypto.HexToECDSA(strings.TrimPrefix(serverWallet.PrivateKeyHex, "0x"))
+	if err != nil {
+		t.Fatalf("parse server private key: %v", err)
+	}
+
+	deviceWallet, err := GenerateWallet()
+	if err != nil {
+		t.Fatalf("generate device wallet: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/sdk/upload", func(w http.ResponseWriter, r *http.Request) {
+		var env secureEnvelope
+		if err := json.NewDecoder(r.Body).Decode(&env); err != nil {
+			http.Error(w, "decode envelope", http.StatusBadRequest)
+			return
+		}
+
+		plaintext, err := decryptForTests(serverKey, env.Payload)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("decrypt: %v", err), http.StatusBadRequest)
+			return
+		}
+
+		var req BatchRequest
+		if err := json.Unmarshal(plaintext, &req); err != nil {
+			http.Error(w, "decode request", http.StatusBadRequest)
+			return
+		}
+
+		if len(req.SignedTransactions) != 1 {
+			http.Error(w, "missing signedTransactions", http.StatusBadRequest)
+			return
+		}
+
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(BatchResponse{
+			Success:           true,
+			TransactionHashes: []string{"0xabc123"},
+			BroadcastCount:    1,
+			Message:           "batch uploaded",
+		})
+	})
+
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	client, err := NewClient(Config{
+		IndexerBaseURL:         srv.URL,
+		EncryptionPublicKeyHex: serverWallet.PublicKeyHex,
+	})
+	if err != nil {
+		t.Fatalf("new client: %v", err)
+	}
+
+	// Test auto-nonce (will fail because we can't connect to real RPC in tests)
+	// This test verifies the code path exists
+	_, err = client.UploadTransactionBatch(context.Background(), UploadTransactionBatchParams{
+		DeviceID:            "TEST-DEVICE",
+		DateComparable:      "20241128",
+		TransactionDataJSON: `{"transactions":[{"factOvertimeMoney":"99.99","order_no":"TEST001"}]}`,
+		PrivateKeyHex:       deviceWallet.PrivateKeyHex,
+		// Nonce is nil - SDK will try to auto-query (will fail in test, but that's ok)
+	})
+
+	// We expect an error because we can't connect to RPC in tests
+	if err == nil {
+		t.Skip("Auto-nonce test skipped (would need real RPC connection)")
+	} else if !strings.Contains(err.Error(), "query nonce") && !strings.Contains(err.Error(), "dial") {
+		t.Errorf("expected nonce query error, got: %v", err)
 	}
 }
 

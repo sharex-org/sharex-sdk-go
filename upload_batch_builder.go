@@ -84,15 +84,15 @@ func BuildSignedUploadBatchTx(p UploadBatchTxParams) (string, error) {
 
 	gasTip := p.GasTipCap
 	if gasTip == nil {
-		gasTip = big.NewInt(1_500_000_000) // 1.5 gwei
+		gasTip = big.NewInt(100_000_000) // 0.1 gwei (conservative default)
 	}
 	gasFee := p.GasFeeCap
 	if gasFee == nil {
-		gasFee = big.NewInt(2_500_000_000) // 2.5 gwei
+		gasFee = big.NewInt(1_000_000_000) // 1 gwei (conservative default)
 	}
 	gasLimit := p.GasLimit
 	if gasLimit == 0 {
-		gasLimit = 500_000
+		gasLimit = 300_000 // Reduced from 500k (more realistic)
 	}
 
 	to := common.HexToAddress(p.ContractAddress)
